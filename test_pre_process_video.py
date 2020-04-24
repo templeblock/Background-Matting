@@ -57,24 +57,22 @@ def alignImages(im1, im2,masksDL):
 
 	return im1Reg
 
-
 def adjustExposure(img,back,mask):
 	kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
 	mask = cv2.dilate(mask, kernel, iterations=10)
 	mask1 = cv2.dilate(mask, kernel, iterations=300)
 	msk=mask1.astype(np.float32)/255-mask.astype(np.float32)/255; msk=msk.astype(np.bool)
 
-	back_tr=back
-	back_tr[...,0]=bias_gain(img[...,0],back[...,0],msk)
-	back_tr[...,1]=bias_gain(img[...,1],back[...,1],msk)
-	back_tr[...,2]=bias_gain(img[...,2],back[...,2],msk)
+	bias=np.zeros((1,3)); gain=np.ones((1,3))
 
-	return back_tr
+	bias[0,0],gain[0,0]=bias_gain(img[...,0],back[...,0],msk)
+	bias[0,1],gain[0,1]=bias_gain(img[...,1],back[...,1],msk)
+	bias[0,2],gain[0,2]=bias_gain(img[...,2],back[...,2],msk)
+
+	return bias,gain
 
 
 def bias_gain(orgR,capR,cap_mask):
-	capR=capR.astype('float32')
-	orgR=orgR.astype('float32')
 
 	xR=capR[cap_mask]
 	yR=orgR[cap_mask]
@@ -82,13 +80,12 @@ def bias_gain(orgR,capR,cap_mask):
 	gainR=np.nanstd(yR)/np.nanstd(xR);
 	biasR=np.nanmean(yR)-gainR*np.nanmean(xR);
 
-	cap_tran=capR*gainR+biasR;
-
-	return cap_tran.astype('float32')
+	return biasR,gainR
 
 
 parser = argparse.ArgumentParser(description='Deeplab Segmentation')
 parser.add_argument('-i', '--input_dir', type=str, required=True,help='Directory to save the output results. (required)')
+parser.add_argument('-v_name','--video_name',type=str, default=None,help='Name of the video')
 args=parser.parse_args()
 
 
@@ -97,17 +94,37 @@ dir_name=args.input_dir
 list_im=glob.glob(dir_name + '/*_img.png'); list_im.sort()
 
 
+back=cv2.imread(args.video_name);
+
+
+# back=back.astype('float32')/255
+# #adjust bias-gain
+# bias=[]; gain=[]
+# for i in range(0,len(list_im),30):
+
+# 	image = cv2.imread(list_im[i]); image=image.astype('float32')/255
+# 	mask = cv2.imread(list_im[i].replace('img','masksDL'))
+
+# 	b,g=adjustExposure(image,back,mask[...,0])
+# 	bias.append(b); gain.append(g)
+# Bias=np.median(np.asarray(bias),axis=0).squeeze(0); 
+# Gain=np.median(np.asarray(gain),axis=0).squeeze(0)
+# back_new=back
+# back_new[...,0]=Gain[0]*back[...,0]+Bias[0]
+# back_new[...,1]=Gain[1]*back[...,1]+Bias[1]
+# back_new[...,2]=Gain[2]*back[...,2]+Bias[2]
+# back_new=(255*back_new).astype(np.uint8)
+
 for i in range(0,len(list_im)):
 
-	image = cv2.imread(list_im[i],cv2.IMREAD_COLOR)
-	back = cv2.imread(list_im[i].replace('img','back'),cv2.IMREAD_COLOR)
+	image = cv2.imread(list_im[i])
 	mask = cv2.imread(list_im[i].replace('img','masksDL'))
-
-	#back_new = adjustExposure(image,back,mask[...,0])
 
 	back_align = alignImages(back, image,mask)
 
 	cv2.imwrite(list_im[i].replace('img','back'),back_align)
 
-str_msg='\nDone: ' + dir_name
-print(str_msg)
+	print('Done: ' + str(i+1) + '/' + str(len(list_im)))
+
+
+	
